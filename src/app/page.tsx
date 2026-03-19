@@ -97,6 +97,41 @@ export default function Home() {
     };
   }, []);
 
+  // Session restoration on mount
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const savedRoomCode = localStorage.getItem('roulette_room_code');
+        if (savedRoomCode && playerId) {
+          console.log('Restoring session for room:', savedRoomCode);
+          const data = await syncRoom(savedRoomCode, playerId);
+          if (data.room && data.currentPlayer) {
+            setRoom(data.room);
+            setCurrentPlayer(data.currentPlayer);
+            setIsMultiplayer(true);
+            
+            if (data.room.status === 'waiting') {
+              setGameMode('waiting');
+            } else if (data.room.status === 'playing' || data.room.status === 'spinning') {
+              setGameMode('playing');
+              if (data.room.status === 'spinning' && data.room.spinStartTime) {
+                setServerSpinStartTime(BigInt(data.room.spinStartTime).valueOf());
+                setIsSpinning(true);
+              }
+            }
+            
+            console.log('Session restored successfully');
+          }
+        }
+      } catch (err) {
+        console.error('Session restore failed:', err);
+        localStorage.removeItem('roulette_room_code');
+      }
+    };
+    
+    restoreSession();
+  }, [playerId]);
+
   // Sync polling for multiplayer
   useEffect(() => {
     if (isMultiplayer && room) {
@@ -182,6 +217,8 @@ export default function Home() {
       setCurrentPlayer(data.room.players[0]);
       setIsMultiplayer(true);
       setGameMode('waiting');
+      // Save room code for session restoration
+      localStorage.setItem('roulette_room_code', data.room.code);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la création');
     } finally {
@@ -199,6 +236,8 @@ export default function Home() {
       setCurrentPlayer(data.player);
       setIsMultiplayer(true);
       setGameMode('waiting');
+      // Save room code for session restoration
+      localStorage.setItem('roulette_room_code', code.toUpperCase());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la connexion');
     } finally {
@@ -245,6 +284,8 @@ export default function Home() {
       }
       setRoom(null);
       setCurrentPlayer(null);
+      // Clear saved session
+      localStorage.removeItem('roulette_room_code');
     }
     setSoloBalance(0);
     setLocalBets([]);
