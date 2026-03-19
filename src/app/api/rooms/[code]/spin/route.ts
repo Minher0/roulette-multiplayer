@@ -99,7 +99,7 @@ export async function POST(
     // Generate random result or use provided
     const result = providedResult ?? Math.floor(Math.random() * 37);
     const color = getNumberColor(result);
-    const spinStartTime = BigInt(Date.now());
+    const spinStartTime = Date.now();
     const spinDuration = 6000; // 6 seconds for animation
 
     // Update room to spinning state
@@ -108,7 +108,7 @@ export async function POST(
       data: {
         status: 'spinning',
         currentSpinResult: result,
-        spinStartTime,
+        spinStartTime: BigInt(spinStartTime),
       }
     });
 
@@ -168,21 +168,9 @@ export async function POST(
     });
 
     // After spin duration, reset to playing state
-    // This is handled client-side but we also update server state
-    setTimeout(async () => {
-      try {
-        await prisma.gameRoom.update({
-          where: { code: code.toUpperCase() },
-          data: {
-            status: 'playing',
-            spinStartTime: null
-          }
-        });
-      } catch (e) {
-        console.error('Error resetting spin state:', e);
-      }
-    }, spinDuration + 1000);
-
+    // Note: In serverless, setTimeout won't persist. Client handles state reset.
+    // We set a cleanup timestamp instead
+    
     return NextResponse.json({
       success: true,
       result: { number: result, color },
