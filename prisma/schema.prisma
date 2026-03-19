@@ -1,0 +1,73 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// Multiplayer Roulette - Complete Schema
+model GameRoom {
+  id                String     @id @default(cuid())
+  code              String     @unique
+  hostId            String
+  hostName          String
+  startingBalance   Int        @default(1000)
+  status            String     @default("waiting") // waiting, playing, spinning, finished
+  currentSpinResult Int?
+  spinStartTime     BigInt?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  players           Player[]
+  spins             GameSpin[]
+  
+  @@index([code])
+  @@index([status])
+  @@map("gamerooms")
+}
+
+model Player {
+  id        String      @id @default(cuid())
+  roomId    String
+  pseudo    String
+  balance   Int         @default(1000)
+  isHost    Boolean     @default(false)
+  isReady   Boolean     @default(false)
+  color     String      @default("#ef4444")
+  joinedAt  DateTime    @default(now())
+  room      GameRoom    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  bets      PlayerBet[]
+  
+  @@unique([roomId, pseudo])
+  @@index([roomId])
+  @@map("players")
+}
+
+model PlayerBet {
+  id        String  @id @default(cuid())
+  playerId  String
+  betType   String
+  number    Int?
+  amount    Int
+  player    Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  
+  @@index([playerId])
+  @@map("playerbets")
+}
+
+model GameSpin {
+  id        String   @id @default(cuid())
+  roomId    String
+  result    Int
+  color     String
+  createdAt DateTime @default(now())
+  room      GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  
+  @@index([roomId])
+  @@map("gamespins")
+}
