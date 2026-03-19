@@ -176,6 +176,19 @@ export default function Home() {
             if (latestSpin && latestSpin.result !== spinResult?.number) {
               setServerSpinResult({ number: latestSpin.result, color: latestSpin.color });
             }
+            
+            // Update history from server spins
+            const serverHistory: HistoryEntry[] = data.room.spins.map((spin: { result: number; color: string; createdAt: string }) => ({
+              result: {
+                number: spin.result,
+                color: spin.color as 'red' | 'black' | 'green',
+                isOdd: spin.result !== 0 && spin.result % 2 === 1,
+                isEven: spin.result !== 0 && spin.result % 2 === 0,
+              },
+              winResult: { totalWin: 0, netResult: 0, winningBets: [] },
+              timestamp: new Date(spin.createdAt)
+            }));
+            setHistory(serverHistory);
           }
         } catch (err) {
           console.error('Sync error:', err);
@@ -420,9 +433,12 @@ export default function Home() {
     setIsSpinning(false);
     setSpinResult(result);
     
+    // Calculate winnings for history
+    let winResult: WinResult = { totalWin: 0, netResult: 0, winningBets: [] };
+    
     // In solo mode, calculate winnings locally
     if (!isMultiplayer) {
-      const winResult = calculateWinnings(localBets, result);
+      winResult = calculateWinnings(localBets, result);
       setLastWinResult(winResult);
       setSoloBalance(b => b - totalLocalBet + winResult.totalWin);
     } else {
@@ -432,6 +448,28 @@ export default function Home() {
           const data = await syncRoom(room.code, playerId);
           if (data.currentPlayer) {
             setCurrentPlayer(data.currentPlayer);
+            // Calculate win/loss based on balance change
+            const balanceChange = data.currentPlayer.balance - (currentPlayer?.balance || 0) + totalLocalBet;
+            winResult = {
+              totalWin: data.currentPlayer.balance,
+              netResult: balanceChange - totalLocalBet,
+              winningBets: []
+            };
+            setLastWinResult(winResult);
+          }
+          // Update history from server spins
+          if (data.room.spins && data.room.spins.length > 0) {
+            const serverHistory: HistoryEntry[] = data.room.spins.map((spin: { result: number; color: string; createdAt: string }) => ({
+              result: {
+                number: spin.result,
+                color: spin.color as 'red' | 'black' | 'green',
+                isOdd: spin.result !== 0 && spin.result % 2 === 1,
+                isEven: spin.result !== 0 && spin.result % 2 === 0,
+              },
+              winResult: { totalWin: 0, netResult: 0, winningBets: [] },
+              timestamp: new Date(spin.createdAt)
+            }));
+            setHistory(serverHistory);
           }
         } catch (err) {
           console.error('Error syncing after spin:', err);
@@ -439,17 +477,19 @@ export default function Home() {
       }
     }
     
-    // Add to history
-    setHistory(prev => [{
-      result,
-      winResult: lastWinResult || { totalWin: 0, netResult: 0, winningBets: [] },
-      timestamp: new Date()
-    }, ...prev].slice(0, 50));
+    // Add to history (for solo mode or if not synced)
+    if (!isMultiplayer) {
+      setHistory(prev => [{
+        result,
+        winResult,
+        timestamp: new Date()
+      }, ...prev].slice(0, 50));
+    }
 
     setLocalBets([]);
     setServerSpinStartTime(null);
     setServerSpinResult(null);
-  }, [isMultiplayer, localBets, totalLocalBet, room, playerId, lastWinResult]);
+  }, [isMultiplayer, localBets, totalLocalBet, room, playerId, currentPlayer, lastWinResult]);
 
   // Lobby screen
   if (gameMode === 'lobby') {
