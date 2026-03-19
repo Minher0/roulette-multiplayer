@@ -181,6 +181,12 @@ export async function POST(
     });
   } catch (error) {
     console.error('Error during spin:', error);
-    return NextResponse.json({ error: 'Failed to process spin' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : '';
+    return NextResponse.json({ 
+      error: 'Failed to process spin', 
+      details: errorMessage,
+      stack: process.env.NODE_ENV === 'development' ? errorStack : undefined
+    }, { status: 500 });
   }
 }
