@@ -167,6 +167,16 @@ export async function POST(
       }
     });
 
+    // Serialize BigInt fields for JSON response
+    const serializedRoom = updatedRoom ? {
+      ...updatedRoom,
+      spinStartTime: updatedRoom.spinStartTime?.toString() || null,
+      players: updatedRoom.players.map(p => ({
+        ...p,
+        joinedAt: p.joinedAt
+      }))
+    } : null;
+
     // After spin duration, reset to playing state
     // Note: In serverless, setTimeout won't persist. Client handles state reset.
     // We set a cleanup timestamp instead
@@ -176,7 +186,7 @@ export async function POST(
       result: { number: result, color },
       spinStartTime: spinStartTime.toString(),
       spinDuration,
-      room: updatedRoom,
+      room: serializedRoom,
       playerResults
     });
   } catch (error) {
