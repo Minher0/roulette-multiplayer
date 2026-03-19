@@ -35,9 +35,23 @@ export async function GET(
       currentPlayer = room.players.find(p => p.id === playerId);
     }
 
+    // Serialize BigInt fields for JSON
+    const serializedRoom = {
+      ...room,
+      spinStartTime: room.spinStartTime?.toString() || null,
+      players: room.players.map(p => ({
+        ...p,
+        bets: p.bets.map(b => ({ ...b }))
+      })),
+      spins: room.spins.map(s => ({ ...s }))
+    };
+
     return NextResponse.json({
-      room,
-      currentPlayer,
+      room: serializedRoom,
+      currentPlayer: currentPlayer ? {
+        ...currentPlayer,
+        bets: currentPlayer.bets.map(b => ({ ...b }))
+      } : null,
       timestamp: Date.now()
     });
   } catch (error) {
