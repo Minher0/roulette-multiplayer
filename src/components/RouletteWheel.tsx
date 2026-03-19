@@ -33,13 +33,49 @@ export default function RouletteWheel({
 
   // Start animation when isSpinning becomes true
   useEffect(() => {
-    if (isSpinning && !isAnimating && !completedRef.current) {
+    if (isSpinning && !isAnimating) {
+      // Reset completed flag for new spin
+      completedRef.current = false;
       setIsAnimating(true);
       setShowBall(true);
       
+      // If we have a server result, calculate target angle for the ball to land on that number
+      let targetBallAngle: number | null = null;
+      
+      if (serverSpinResult) {
+        // Find the index of the winning number in the wheel sequence
+        const winningIndex = WHEEL_SEQUENCE.indexOf(serverSpinResult.number);
+        if (winningIndex !== -1) {
+          // Calculate the angle where this number is on the wheel
+          // The wheel's 0° is at top, and segments go clockwise
+          const numberAngle = winningIndex * segmentAngle + segmentAngle / 2; // Center of segment
+          
+          // Calculate wheel rotation (will be determined below)
+          // Ball needs to land at: wheelRotation + numberAngle (in wheel reference)
+          // But ball angle is in screen reference (0° = right, counter-clockwise positive)
+          // Wheel reference: 0° = top, clockwise positive
+          // Conversion: screen_angle = 90 - wheel_angle (or wheel_angle + 90 in our case since we use rotate())
+          
+          // Store for later use in animation
+          targetBallAngle = numberAngle;
+        }
+      }
+      
       // Calculate wheel final angle
       const wheelSpins = 4 + Math.random() * 2;
-      const finalWheelAngle = wheelRotation + wheelSpins * 360 + Math.random() * 360;
+      let finalWheelAngle = wheelRotation + wheelSpins * 360 + Math.random() * 360;
+      
+      // If we have a target, adjust wheel rotation so ball lands on target
+      if (targetBallAngle !== null) {
+        // Ball will settle at a specific angle relative to screen
+        // We need: (ballFinalAngle + 90) - finalWheelRotation ≈ targetBallAngle (mod 360)
+        // So: finalWheelRotation = ballFinalAngle + 90 - targetBallAngle
+        // Let's make ball settle at angle 0 (right side) for simplicity
+        const ballFinalAngle = 0; // Ball will settle pointing right
+        finalWheelAngle = ballFinalAngle + 90 - targetBallAngle;
+        // Add full rotations for visual effect
+        finalWheelAngle += Math.floor(wheelSpins) * 360;
+      }
       
       // Ball physics
       let currentBallAngle = ballAngle;
@@ -48,12 +84,15 @@ export default function RouletteWheel({
       let isSettling = false;
       
       const gravity = 0.015;
-      const friction = 0.992;
+      const friction = 0.985; // Increased friction for faster settling
       const bounceEnergy = 0.4;
       const minRadius = 108;
       
       const startTime = Date.now();
       const duration = 5000; // 5 seconds animation
+      
+      // Target ball angle for settling (if we have a server result)
+      const settleAngle = targetBallAngle !== null ? 0 : null;
       
       // Animation loop
       const animate = () => {
@@ -74,6 +113,14 @@ export default function RouletteWheel({
         
         currentBallAngle += currentBallVelocity;
         
+        // If we have a target settling angle, guide the ball towards it in the final phase
+        if (settleAngle !== null && progress > 0.7 && currentBallRadius <= minRadius + 5) {
+          // Gradually adjust ball angle towards target
+          const angleDiff = settleAngle - (currentBallAngle % 360);
+          const normalizedDiff = ((angleDiff + 180) % 360) - 180; // -180 to 180
+          currentBallAngle += normalizedDiff * 0.05 * (progress - 0.7) / 0.3;
+        }
+        
         if (currentBallRadius <= minRadius + 2 && !isSettling) {
           if (Math.random() < 0.03 && Math.abs(currentBallVelocity) > 0.3) {
             currentBallVelocity *= -bounceEnergy;
@@ -84,16 +131,30 @@ export default function RouletteWheel({
             isSettling = true;
             currentBallVelocity = 0;
             currentBallRadius = minRadius;
+            // Snap to target angle if we have one
+            if (settleAngle !== null) {
+              currentBallAngle = settleAngle;
+            }
           }
         }
         
         setBallAngle(currentBallAngle);
         setBallRadius(currentBallRadius);
         
-        if (progress < 1 || !isSettling) {
+        // Force completion if we've exceeded the duration
+        const forceComplete = elapsed >= duration;
+        
+        if ((progress < 1 || !isSettling) && !forceComplete) {
           animationFrameRef.current = requestAnimationFrame(animate);
         } else {
-          // Animation complete
+          // Animation complete - force settling if needed
+          if (!isSettling) {
+            currentBallVelocity = 0;
+            currentBallRadius = minRadius;
+            if (settleAngle !== null) {
+              currentBallAngle = settleAngle;
+            }
+          }
           finishSpin(finalWheelAngle, currentBallAngle);
         }
       };
@@ -117,18 +178,12 @@ export default function RouletteWheel({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [isSpinning]);
+  }, [isSpinning, serverSpinResult]);
 
-  // Reset when spinning stops
+  // Reset animation state when spinning stops
   useEffect(() => {
     if (!isSpinning && isAnimating) {
       setIsAnimating(false);
-      completedRef.current = true;
-      
-      // Reset completed flag after a delay
-      setTimeout(() => {
-        completedRef.current = false;
-      }, 1000);
     }
   }, [isSpinning, isAnimating]);
 
